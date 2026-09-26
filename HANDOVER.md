@@ -88,10 +88,33 @@ Assistant 2027.3" — it expects the `<domain>__` prefix. Renamed 2026-09-26. A
 contract test pins the separator, because a single underscore works today and
 reads as a typo, which is exactly how it would get "fixed" back.
 
-The second tool under the `ha_dev_tools` umbrella. **A Core restart is still
-required** — `llm.py` changed, so the LLM platform must re-register. It is not in
-the tool catalog until that happens, and the restart has not been done or
-approved.
+The second tool under the `ha_dev_tools` umbrella. **A Core restart alone is not
+enough** — see "stale tool catalog" below.
+
+### Stale tool catalog — a Core restart does not update the client's tool list
+
+Verified 2026-09-26. After deploying a tool change and restarting Core, a brand
+new session still received a catalog from before the change: 17 tools, the *old*
+tool name, and no `find_dangling_references` at all.
+
+Core itself was correct throughout. Proof from the other side:
+
+- Calling the old single-underscore name returned `Tool not found` — so Core no
+  longer had it.
+- The "not prefixed with `ha_dev_tools__`" warning appears on every boot *except*
+  the one after the rename. Its absence is what correctly-prefixed registration
+  looks like.
+- Core logged `Tool 'ha_dev_tools_find_entity_references' not listed, no
+  validation will be performed` — the *server* rejecting a call the *client*
+  believed valid.
+
+So the stale layer is the client/sidecar catalog, not Home Assistant. Restarting
+the OpenCode add-on is what forces it to re-fetch. **Which layer caches was not
+traced**: `mcp-plugin/index.js` re-exports `plugin.js`, and `plugin.js` contains
+no occurrence of the string "tool" at all, so the proxying lives elsewhere.
+
+The practical rule is in `AGENTS.local.md`: after a Core restart that changes the
+LLM tool set, restart the add-on too.
 
 It reports configuration pointing at entity IDs that do not exist: triggers that
 can never fire, cards permanently unavailable, hand-typed typos. Disjoint from
