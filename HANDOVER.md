@@ -79,6 +79,43 @@ it was originally planned:
 `my-home.yaml.bak` file, a docstring example inside `scanner.py` itself, and the
 entity registry.
 
+## find_dangling_references — built and deployed, NOT yet live
+
+The second tool under the `ha_dev_tools` umbrella. **A Core restart is still
+required** — `llm.py` changed, so the LLM platform must re-register. It is not in
+the tool catalog until that happens, and the restart has not been done or
+approved.
+
+It reports configuration pointing at entity IDs that do not exist: triggers that
+can never fire, cards permanently unavailable, hand-typed typos. Disjoint from
+`find_entity_references`, which answers the inverse.
+
+**The design constraint that matters, learned the hard way:** existence is
+validated against `hass.states`, *never* the entity registry. An entity declared
+in `configuration.yaml` under a platform with no `unique_id` — `mqtt: sensor:`
+here — lives only in the state machine and appears in no registry. A
+registry-based check reported `sensor.proxmox_battery_level` as broken; it is a
+live sensor at 77% on a five-minute cycle driving a working automation and a
+working dashboard tile. It is now a regression fixture in `test_references.py`.
+
+Calibrating against the real config drove the false-positive work: 46 candidates
+for 1 genuine finding, because blueprints and `opencode/decisions.yaml` were being
+mined for `domain.object` tokens. Now 1 — service names excluded explicitly,
+blueprints and `opencode/` not scanned, Jinja and URL lines skipped and *counted*
+rather than silently dropped.
+
+## Duplicate-device detection — abandoned after measurement
+
+The third candidate tool was dropped before any code was written. Zero pairs of
+devices share an identifier value across all 63 devices, which emptied the
+intended high-confidence tier; all three predicted duplicates turned out to be
+complementary integrations or HACS artefacts; and the false-positive inventory
+includes two ZBT-2 dongles that share manufacturer and model but are different
+hardware. Roughly 1 true positive against 12 traps. Full reasoning in
+`RESEARCH-device-duplicate-detection.md`. The registry-*anomalies* reframe (null
+manufacturer/model, devices with no area, phantom HACS entries) is recorded
+there and is not worth building on a well-kept install.
+
 ## Native Home Assistant MCP — enabled and verified
 
 - The `mcp_server` ("Model Context Protocol Server") integration is **added**.
@@ -109,31 +146,38 @@ entity registry.
 relationship, therefore no rebase tax.
 
 ```
-native/ha_dev_tools/scanner.py           pure scan logic, stdlib only  <- source of truth
-native/ha_dev_tools/llm.py               thin Home Assistant layer
+native/ha_dev_tools/scanner.py           reference scan logic, stdlib only  <- source of truth
+native/ha_dev_tools/references.py        dangling-reference scan logic, stdlib only
+native/ha_dev_tools/llm.py               thin Home Assistant layer, two tool classes
 native/ha_dev_tools/__init__.py          TYPE_CHECKING import only
 native/ha_dev_tools/const.py             DOMAIN constant
 native/ha_dev_tools/manifest.json
-native/run-tests.sh                      35 tests, no HA needed
-native/tests/test_scanner.py             runtime tests for the scanner
+native/run-tests.sh                      78 tests, no HA needed
+native/tests/test_scanner.py             runtime tests for the reference scanner
+native/tests/test_references.py          runtime tests for the dangling scanner
 native/tests/test_integration_contract.py  static AST checks on the HA-facing layer
 lib/entity-references.js                 the JavaScript original
 lib/entity-rename.js                     rename logic (no delivery path)
 scripts/find-entity-references.mjs       CLI
 test/*.test.js                           JavaScript test suite
+RESEARCH-device-duplicate-detection.md   abandoned approach + the measurements
 ```
+
+`__pycache__` is gitignored as of 2026-09-26; seven `.pyc` build artefacts were
+tracked before and are now untracked (still on disk, just not versioned).
 
 Local: `/data/v2/cache/opencode/ha-opencode-tools`
 
 The Python scanner was verified **byte-identical to the JavaScript one** across 7
 entity IDs against the live configuration directory.
 
-Testing: **35 tests, all passing.** `scanner.py` is stdlib-only and tested at
-runtime. `llm.py` **cannot** be imported without the `homeassistant` package
-(absent from the add-on container), so it is covered by static AST checks in
-`test_integration_contract.py` instead — an earlier claim that it had no tests at
-all was true when written and is now out of date. That contract suite is what
-caught the `async_setup` signature bug; the fix is deployed.
+Testing: **78 tests, all passing** (35 before the second tool). `scanner.py` and
+`references.py` are stdlib-only and tested at runtime. `llm.py` **cannot** be
+imported without the `homeassistant` package (absent from the add-on container),
+so it is covered by static AST checks in `test_integration_contract.py` instead —
+an earlier claim that it had no tests at all was true when written and is now out
+of date. That contract suite is what caught the `async_setup` signature bug; the
+fix is deployed.
 
 **Snapshot:** the local clone is level with `origin/main` — 0 ahead / 0 behind,
 working tree clean. The doc changes flagged in earlier revisions of this file
