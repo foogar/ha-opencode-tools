@@ -135,10 +135,10 @@ runtime. `llm.py` **cannot** be imported without the `homeassistant` package
 all was true when written and is now out of date. That contract suite is what
 caught the `async_setup` signature bug; the fix is deployed.
 
-**Snapshot:** the local clone is level with `origin/main` as of 2026-09-26 — all
-four commits pushed. `HANDOVER.md` and `README.md` had **uncommitted doc changes
-at the time of writing** (AI-assistance disclosure, corrected delivery status);
-`git status` in the repo is the authority on whether those were committed.
+**Snapshot:** the local clone is level with `origin/main` — 0 ahead / 0 behind,
+working tree clean. The doc changes flagged in earlier revisions of this file
+(AI-assistance disclosure, corrected delivery status) have since been
+committed; `git status` in the repo remains the authority.
 
 **`foogar/ha-mcp-server-dev`** — **archived on GitHub 2026-09-26.** Superseded
 and README-marked beforehand. A local clone remains at
@@ -189,6 +189,34 @@ add-on at `ha_opencode/`, MCP server at `ha_opencode/rootfs/opt/ha-mcp-server/`)
 - **`python3` has no `yaml` module** in the add-on container. To check that
   `decisions.yaml` still parses, use `recall_decisions` — it parses the file, so
   a successful return is the parse test.
+- **The add-on's `env_vars` field is an allowlist, not an environment
+  passthrough.** Only names matching `*_API_KEY` (plus `PPQ_API_KEY`) are
+  forwarded; anything else is accepted, saved to `options.json`, silently
+  dropped, and merely produces a startup warning — "Some env_vars are not
+  forwarded to the V2 backend". The filter is
+  `/opt/opencode-v2-homeassistant/user-config.js:112-118`. Verified 2026-09-26
+  after a full HA restart: `GIT_CONFIG_GLOBAL=/data/gitconfig` passes the UI and
+  lands in `options.json`, but is absent from the container —
+  `/run/s6/container_environment` holds no `GIT_*` — so **no restart can
+  inject it**. Consequence: `git config --global` hard-fails, because
+  `HOME=/run/opencode-v2/home` and `XDG_CONFIG_HOME=/run/opencode-v2/config` are
+  on the container overlay and are wiped on add-on restart. Per-repo
+  `.git/config` under `/data` is the durable path and authenticates fine
+  (`ls-remote` proven). A **new clone** has no per-repo config, so set
+  `user.name`, `user.email` and
+  `credential.helper=store --file=/data/.git-credentials` after cloning.
+  Pinned decision note.
+- **Add-on options cannot be changed from the agent.** `hab` has no
+  add-on/options command and `hassio` exposes no options service (only
+  `addon_start/stop/restart/stdin`, backups, restore, `mount_reload`). The
+  Supervisor API returns 401 because `SUPERVISOR_TOKEN` / `HASSIO_TOKEN` live
+  in the s6 container environment and are deliberately **not** inherited by the
+  agent shell — do not scrape them out of
+  `/run/s6/container_environment/SUPERVISOR_TOKEN` to get around this. The user
+  must edit options in the add-on UI; hand-editing `/data/options.json`
+  desyncs from Supervisor's authoritative copy and is likely to be reverted.
+  The inert `GIT_CONFIG_GLOBAL` row is still present — Configuration →
+  Environment variables → delete it to silence the warning.
 
 ## Standing constraints to keep honouring
 
@@ -214,7 +242,8 @@ add-on at `ha_opencode/`, MCP server at `ha_opencode/rootfs/opt/ha-mcp-server/`)
 - **Disclose AI assistance.** Code in these repos is AI-written and says so in
   the README. Do not withhold code from a public repo *because* it is
   AI-generated — that is not the user's view, and disclosure is the point.
-- Git identity is `foogar <foogar@gmail.com>`, set per-repo in `.git/config`
-  and in `/data/gitconfig`. Commits authored before 2026-09-26 were attributed
-  to `root@<container-id>` because no identity was configured; left as-is
-  rather than rewritten.
+- Git identity is `foogar <foogar@gmail.com>`, set **per-repo** in each repo's
+  `.git/config`. Commits authored before 2026-09-26 were attributed to
+  `root@<container-id>` because no identity was configured; left as-is rather
+  than rewritten. `/data/gitconfig` holds the same values and is **not** in
+  effect — see the pitfall above.
