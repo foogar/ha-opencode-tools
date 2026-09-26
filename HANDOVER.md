@@ -6,9 +6,11 @@ Paste this into a new OpenCode session to restore context. Also saved here as
 ## Who you're talking to
 
 A Home Assistant user on a single supervised instance, security-conscious and
-practical. They declined an upstream PR to a public repo (uneasy about AI-derived
-code in public) and declined a startup hook running a root HTTP server on risk
-grounds. One active private repo: `foogar/ha-opencode-tools`.
+practical. They declined an upstream PR to a public repo — the real reason was
+never established, and an earlier claim that they were uneasy about AI-derived
+code was **wrong**; see the pinned note "Disclose AI authorship" — and declined a
+startup hook running a root HTTP server on risk grounds. One active private repo:
+`foogar/ha-opencode-tools`.
 
 Working style, from `AGENTS.local.md`: show the diff before writing, wait for
 go-ahead, one change at a time, default to read-only when investigating. Back up
@@ -133,10 +135,10 @@ runtime. `llm.py` **cannot** be imported without the `homeassistant` package
 all was true when written and is now out of date. That contract suite is what
 caught the `async_setup` signature bug; the fix is deployed.
 
-**Snapshot:** as of 2026-09-26 the local clone is **3 commits ahead of
-`origin/main`, unpushed** (`Fix async_setup signature and add contract tests`,
-`Add a session handover`, `Add a native llm.py tool for finding configuration
-references`). This line goes stale once pushed.
+**Snapshot:** the local clone is level with `origin/main` as of 2026-09-26 — all
+four commits pushed. `HANDOVER.md` and `README.md` had **uncommitted doc changes
+at the time of writing** (AI-assistance disclosure, corrected delivery status);
+`git status` in the repo is the authority on whether those were committed.
 
 **`foogar/ha-mcp-server-dev`** — **archived on GitHub 2026-09-26.** Superseded
 and README-marked beforehand. A local clone remains at
@@ -209,3 +211,10 @@ add-on at `ha_opencode/`, MCP server at `ha_opencode/rootfs/opt/ha-mcp-server/`)
   `configuration.yaml`. (The `ha_dev_tools:` key went in `configuration.yaml`
   because packages are for reusable config fragments and forcing an integration
   to load is not one.)
+- **Disclose AI assistance.** Code in these repos is AI-written and says so in
+  the README. Do not withhold code from a public repo *because* it is
+  AI-generated — that is not the user's view, and disclosure is the point.
+- Git identity is `foogar <foogar@gmail.com>`, set per-repo in `.git/config`
+  and in `/data/gitconfig`. Commits authored before 2026-09-26 were attributed
+  to `root@<container-id>` because no identity was configured; left as-is
+  rather than rewritten.
