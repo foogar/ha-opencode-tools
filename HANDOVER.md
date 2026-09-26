@@ -1,15 +1,14 @@
 # Session Handover
 
 Paste this into a new OpenCode session to restore context. Also saved here as
-`HANDOVER.md`. Contains no secrets.
+`HANDOVER.md`. Contains no secrets. Snapshot taken 2026-09-26.
 
 ## Who you're talking to
 
 A Home Assistant user on a single supervised instance, security-conscious and
 practical. They declined an upstream PR to a public repo (uneasy about AI-derived
 code in public) and declined a startup hook running a root HTTP server on risk
-grounds. Two repos, both private: `foogar/ha-opencode-tools` and
-`foogar/ha-mcp-server-dev`.
+grounds. One active private repo: `foogar/ha-opencode-tools`.
 
 Working style, from `AGENTS.local.md`: show the diff before writing, wait for
 go-ahead, one change at a time, default to read-only when investigating. Back up
@@ -47,6 +46,37 @@ The registered device is "Johns Phone", so the notify service is
 was opened. Both corrected in `automations.yaml` and reloaded. All 7 automations
 and their `id`s intact.
 
+## ha_dev_tools — deployed and verified live
+
+**Nothing is pending here. Do not schedule a restart to "finish" it.**
+
+Deployment is complete and the tool answers live:
+
+- `custom_components/ha_dev_tools/` — 5 files (including `const.py`), mode 0644,
+  HACS components untouched. Byte-identical to `native/ha_dev_tools/` in the repo.
+- `configuration.yaml` has `ha_dev_tools:` added and validated.
+- `ha_dev_tools` **is** present in `get_config` → `components`.
+- The tool is live as `ha_dev_tools_find_entity_references` on the
+  `homeassistant_native` surface.
+
+The Core restart that was needed has already happened. Verification, in the order
+it was originally planned:
+
+1. `ha_dev_tools` in `get_config` → `components` — **confirmed**.
+2. Tool in the session catalog — **confirmed**. (The catalog is fixed at session
+   start, so confirming it required a *new* session; that is why this handover
+   existed.)
+3. Agreement with the standalone script — **confirmed**. The tool's per-entity
+   payload is identical to
+   `node scripts/find-entity-references.mjs lock.front_door`: `files_scanned: 12`,
+   `total_matches: 1`, `dashboards/workshop.yaml:22`, `truncated: false`. Only
+   the envelope differs (the tool adds `not_scanned` / `affected_file_count`; the
+   CLI adds `elapsed_ms`). Independently cross-checked with a raw grep.
+
+`workshop.yaml:22` is the only live reference. Correctly *excluded*: a
+`my-home.yaml.bak` file, a docstring example inside `scanner.py` itself, and the
+entity registry.
+
 ## Native Home Assistant MCP — enabled and verified
 
 - The `mcp_server` ("Model Context Protocol Server") integration is **added**.
@@ -60,35 +90,16 @@ and their `id`s intact.
 - **No credential is involved** — the bridge authenticates with the Supervisor
   token.
 - A second MCP server `homeassistant_native` appears alongside `homeassistant`.
-  It carries 16 Assist tools (9 of them `media_player`).
-- Standing decision, recorded: dev/validation tools stay on the `homeassistant`
-  MCP server. **Do not move them onto the Assist surface** — it is entity-scoped
-  by design and `llm_context.assistant` / `async_should_expose` gating is aimed
-  at entity tools. See decision note "Native HA MCP bridge is on by design".
-
-## The pending task
-
-**A Core restart is required** to finish the `ha_dev_tools` deployment.
-
-Done already:
-- `custom_components/ha_dev_tools/` deployed — 5 files, 0644, HACS components
-  untouched.
-- `configuration.yaml` has `ha_dev_tools:` added and **validated**.
-- `reload_core_config` and `reload_all` both ran successfully and **neither
-  loaded it**. In HA 2026.9.3 a newly added integration needs a Core restart.
-
-After the restart, in this order:
-
-1. Confirm `ha_dev_tools` appears in `get_config` → `components`.
-2. Confirm the tool is in the session's catalog as
-   `ha_dev_tools_find_entity_references` (catalog is fixed at session start, so
-   a new session is required — that is why this handover exists).
-3. Call it on a real entity and check it agrees with the script:
-   `node /data/v2/cache/opencode/ha-opencode-tools/scripts/find-entity-references.mjs lock.front_door`
-   should report `dashboards/workshop.yaml:22`.
-4. If it does not appear, the failure will be in the Core log — an import error
-   in `llm.py`. There are no unit tests for `llm.py` (no `homeassistant` package
-   in the add-on container); only `scanner.py` is covered.
+  It carries the 16 Assist tools (9 of them `media_player`) **plus**
+  `ha_dev_tools_find_entity_references`, for 17.
+- Standing decision, recorded and **pinned**: dev/validation tools stay on the
+  `homeassistant` MCP server. **Exception:** native `<integration>/llm.py`
+  providers — `ha_dev_tools` among them — are exposed on `homeassistant_native`,
+  and that is their only delivery path, not a misplaced tool. They register with
+  Core's `llm` component, and the add-on's own MCP server has a separate tool
+  registry that cannot reach them. **Do not try to relocate them** — an earlier
+  version of this document said otherwise and was wrong. See decision note "Dev
+  tools stay on the homeassistant MCP server; native llm.py providers excepted".
 
 ## Repositories
 
@@ -96,14 +107,18 @@ After the restart, in this order:
 relationship, therefore no rebase tax.
 
 ```
-native/ha_dev_tools/scanner.py    pure scan logic, stdlib only  <- source of truth
-native/ha_dev_tools/llm.py        thin Home Assistant layer
-native/ha_dev_tools/__init__.py   TYPE_CHECKING import only
+native/ha_dev_tools/scanner.py           pure scan logic, stdlib only  <- source of truth
+native/ha_dev_tools/llm.py               thin Home Assistant layer
+native/ha_dev_tools/__init__.py          TYPE_CHECKING import only
+native/ha_dev_tools/const.py             DOMAIN constant
 native/ha_dev_tools/manifest.json
-native/run-tests.sh               20 tests, no HA needed
-lib/entity-references.js          the JavaScript original
-lib/entity-rename.js              rename logic (no delivery path)
-scripts/find-entity-references.mjs CLI
+native/run-tests.sh                      35 tests, no HA needed
+native/tests/test_scanner.py             runtime tests for the scanner
+native/tests/test_integration_contract.py  static AST checks on the HA-facing layer
+lib/entity-references.js                 the JavaScript original
+lib/entity-rename.js                     rename logic (no delivery path)
+scripts/find-entity-references.mjs       CLI
+test/*.test.js                           JavaScript test suite
 ```
 
 Local: `/data/v2/cache/opencode/ha-opencode-tools`
@@ -111,10 +126,28 @@ Local: `/data/v2/cache/opencode/ha-opencode-tools`
 The Python scanner was verified **byte-identical to the JavaScript one** across 7
 entity IDs against the live configuration directory.
 
-**`foogar/ha-mcp-server-dev`** — superseded, README marked. Awaiting manual
-archive (Settings → General → Danger Zone); the token lacks repo administration
-permission. Contains `rename_entity`, which is finished and tested but has **no
-working delivery path** — all three routes fail:
+Testing: **35 tests, all passing.** `scanner.py` is stdlib-only and tested at
+runtime. `llm.py` **cannot** be imported without the `homeassistant` package
+(absent from the add-on container), so it is covered by static AST checks in
+`test_integration_contract.py` instead — an earlier claim that it had no tests at
+all was true when written and is now out of date. That contract suite is what
+caught the `async_setup` signature bug; the fix is deployed.
+
+**Snapshot:** as of 2026-09-26 the local clone is **3 commits ahead of
+`origin/main`, unpushed** (`Fix async_setup signature and add contract tests`,
+`Add a session handover`, `Add a native llm.py tool for finding configuration
+references`). This line goes stale once pushed.
+
+**`foogar/ha-mcp-server-dev`** — **archived on GitHub 2026-09-26.** Superseded
+and README-marked beforehand. A local clone remains at
+`/data/v2/cache/opencode/ha-mcp-server-dev`; it is clean, all 4 branches are
+`0 ahead / 0 behind` origin, no stashes, `node_modules` gitignored. Nothing is
+stranded there and nothing needs doing — it is ~105M of disk if you ever want it
+gone.
+
+It contains `rename_entity`, finished and tested, with **no working delivery
+path**. All three routes fail, and the user has said not to spend more time on
+it:
 
 1. Image overlay → requires shadowing upstream's `index.js` forever, and the
    diff lands in the TOOLS array and dispatch switch where conflicts recur.
@@ -125,8 +158,8 @@ working delivery path** — all three routes fail:
    but is reset on the next restart.
 3. Startup hook → declined on risk grounds.
 
-Finding 2 is worth reporting upstream: no Home Assistant install with a 0700
-`/data/.config/opencode` can use the documented `type: "local"` path.
+Finding 2 is still worth reporting upstream: no Home Assistant install with a
+0700 `/data/.config/opencode` can use the documented `type: "local"` path.
 
 Upstream clone: `/data/v2/cache/opencode/opencode-upstream` (magnusoverli/opencode,
 add-on at `ha_opencode/`, MCP server at `ha_opencode/rootfs/opt/ha-mcp-server/`).
@@ -137,6 +170,7 @@ add-on at `ha_opencode/`, MCP server at `ha_opencode/rootfs/opt/ha-mcp-server/`)
   services are `homeassistant.reload_core_config`, `homeassistant.reload_all`,
   `homeassistant.restart`.
 - **Newly added integrations need a Core restart**, not a config reload.
+  `reload_core_config` and `reload_all` both succeed and neither loads them.
 - **`hab backup create` is broken** — fails with `required key not provided at
   'agent_ids'` regardless of arguments, and the help exposes no such flag.
   Independently visible in the Core log.
@@ -144,20 +178,27 @@ add-on at `ha_opencode/`, MCP server at `ha_opencode/rootfs/opt/ha-mcp-server/`)
   `get_error_log` / `get_support_logs` cannot be trusted for recent events.
 - **`/homeassistant` is not a git repo.** `custom_components/` is unversioned,
   which is why native integration source lives in `ha-opencode-tools` and is
-  copied in.
+  copied in. Re-copy after changing the repo source; nothing enforces this.
 - **`get_config` dumps ~280 components** — it is the only reliable way to check
-  whether an integration is loaded, but it is a very large payload. `mcp_server`
-  appearing there while `ha_dev_tools` does not is how we proved the reload
-  didn't work.
+  whether an integration is loaded, but it is a very large payload.
 - Two tools return "no references" as a **result**, not a failure, and a failed
   scan reports `scanned: false` rather than raising. Absence of data is never
   reported as safety.
+- **`python3` has no `yaml` module** in the add-on container. To check that
+  `decisions.yaml` still parses, use `recall_decisions` — it parses the file, so
+  a successful return is the parse test.
 
 ## Standing constraints to keep honouring
 
 - Never read or print `secrets.yaml`, tokens, or the GitHub credential at
   `/data/.git-credentials`. Tokens are installed by the user via a hidden
   `read -r -s` prompt in the add-on's Terminal view, never pasted into chat.
+- HA internal directories — `.storage/`, `.cloud/`, `deps/`, `tts/`,
+  `home-assistant_v2.db`, `home-assistant.log` — are **read-safe, never
+  write-safe**. Routine greps and reads that surface their content are fine and
+  often useful (the entity registry settles platform and `unique_id` questions
+  faster than any MCP tool). Never edit, write, move or delete inside them; use
+  MCP tools or `hab` to change state. Pinned decision note.
 - Do not touch the four HACS components in `custom_components/` (`battery_notes`,
   `googlefindmy`, `hacs`, `kleenex_pollenradar`).
 - Do not troubleshoot `media_player.guest_bedroom` or
