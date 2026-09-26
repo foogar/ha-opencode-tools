@@ -1,0 +1,10 @@
+{
+  "domain": "ha_dev_tools",
+  "name": "Developer Tools",
+  "codeowners": ["@foogar"],
+  "config_flow": false,
+  "documentation": "https://github.com/foogar/ha-opencode-tools",
+  "integration_type": "helper",
+  "requirements": [],
+  "version": "0.1.0"
+}
