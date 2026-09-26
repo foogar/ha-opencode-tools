@@ -15,12 +15,17 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.typing import ConfigType
 
 
-async def async_setup(hass: HomeAssistant) -> bool:
-    """Set up the integration.
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the integration from configuration.yaml.
+
+    The two-argument signature is required: Home Assistant calls a
+    YAML-configured component as ``async_setup(hass, config)``. The one-argument
+    form belongs to config-entry setup, and using it here fails setup outright.
 
     Tools are discovered through ``llm.py`` when the integration is loaded, so
-    there is nothing to do here.
+    there is nothing to do.
     """
     return True
