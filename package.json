@@ -1,0 +1,16 @@
+{
+  "name": "ha-opencode-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Authored Home Assistant tools for OpenCode. No upstream relationship, so no rebase tax.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
