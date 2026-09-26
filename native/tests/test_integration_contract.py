@@ -300,6 +300,31 @@ class TestDanglingToolRegistration(unittest.TestCase):
         # limitation of the check.
         self.assertIn('"validated_against"', self.source)
 
+    def test_tool_names_use_the_required_double_underscore_prefix(self) -> None:
+        # Core 2026.9.3 logs, for the pre-rename names:
+        #   "provides LLM tools that are not prefixed with 'ha_dev_tools__':
+        #    ha_dev_tools_find_entity_references. This will stop working in
+        #    Home Assistant 2027.3"
+        # A single underscore works today and looks like a typo, so the most
+        # likely way this regresses is somebody tidying it. Pin it.
+        for tool in ("FindEntityReferencesTool", "FindDanglingReferencesTool"):
+            with self.subTest(tool=tool):
+                name_expr = next(
+                    ast.unparse(node.value)
+                    for node in self.classes[tool].body
+                    if isinstance(node, ast.Assign)
+                    for target in node.targets
+                    if isinstance(target, ast.Name) and target.id == "name"
+                )
+                # The invariant is the separator, not the whole rendered string:
+                # ast.unparse normalises quote style, so comparing the literal
+                # would be brittle for no benefit.
+                self.assertIn("{DOMAIN}__", name_expr)
+                self.assertNotIn("{DOMAIN}_find", name_expr)
+
+    def test_no_tool_name_uses_a_single_underscore_prefix(self) -> None:
+        self.assertNotIn('f"{DOMAIN}_find', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

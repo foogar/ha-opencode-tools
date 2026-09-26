@@ -42,7 +42,12 @@ from .scanner import (
 class FindEntityReferencesTool(Tool):
     """Report configuration files that reference an entity ID."""
 
-    name = f"{DOMAIN}_find_entity_references"
+    # The double underscore is required, not a typo. Home Assistant expects a
+    # custom integration's LLM tools to be prefixed with "<domain>__" and logs
+    # "This will stop working in Home Assistant 2027.3" for a single underscore.
+    # Confirmed against Core 2026.9.3; see the test asserting it in
+    # test_integration_contract.py before "correcting" this back.
+    name = f"{DOMAIN}__find_entity_references"
     description = (
         "Report which Home Assistant configuration files reference the given entity "
         "IDs, with line numbers. Use this before renaming or deleting an entity, "
@@ -125,7 +130,8 @@ class FindEntityReferencesTool(Tool):
 class FindDanglingReferencesTool(Tool):
     """Report configuration references to entity IDs that do not exist."""
 
-    name = f"{DOMAIN}_find_dangling_references"
+    # Double underscore, as above: see FindEntityReferencesTool.name.
+    name = f"{DOMAIN}__find_dangling_references"
     description = (
         "Report automations, scripts, scenes and dashboards that reference an "
         "entity ID which does not exist. Use this when a trigger never fires, a "

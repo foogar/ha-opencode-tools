@@ -100,7 +100,7 @@ dashboard card, and the reason it nearly happened is the same reason this file
 exists: a plausible mechanism, checked against a source that could not answer
 the question, and reported with the same confidence either way.
 
-`ha_dev_tools_find_dangling_references` now validates against `hass.states`, and
+`ha_dev_tools__find_dangling_references` now validates against `hass.states`, and
 carries `sensor.proxmox_battery_level` as a regression fixture in
 `native/tests/test_references.py`. If that test ever fails, the tool is dangerous
 rather than merely wrong.

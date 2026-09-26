@@ -47,10 +47,10 @@ node scripts/find-entity-references.mjs lock.front_door
 
 Both are read-only and served over Home Assistant's native LLM platform.
 
-**`ha_dev_tools_find_entity_references`** — given entity IDs, reports which
+**`ha_dev_tools__find_entity_references`** — given entity IDs, reports which
 configuration files name them, with line numbers. Use before a rename or delete.
 
-**`ha_dev_tools_find_dangling_references`** — reports configuration that points
+**`ha_dev_tools__find_dangling_references`** — reports configuration that points
 at entity IDs which do not exist: triggers that can never fire, cards that are
 permanently unavailable, hand-typed typos. Use when something mysteriously does
 not work.
@@ -84,7 +84,7 @@ to anyone who installs it.
 
 | Tool | Status |
 |---|---|
-| `find_entity_references` | **Shipped and live.** Deployed as the Home Assistant native provider `ha_dev_tools_find_entity_references` and served on `/api/mcp/assist`. The CLI is the standalone equivalent and needs no install. |
+| `find_entity_references` | **Shipped and live.** Deployed as the Home Assistant native provider `ha_dev_tools__find_entity_references` and served on `/api/mcp/assist`. The CLI is the standalone equivalent and needs no install. |
 | `find_dangling_references` | **Built and deployed, pending a Core restart.** The second tool under the `ha_dev_tools` umbrella. Pure logic in `references.py`, 27 new tests plus contract checks for module isolation. Not yet live: `llm.py` changed, so the LLM platform must re-register. |
 | `rename_entity` | **No working delivery path.** The logic is finished, reviewed and tested, but every route to a tool catalog is currently blocked. |
 | *(device duplicate detection)* | **Abandoned after measurement.** See `RESEARCH-device-duplicate-detection.md`. Zero shared identifiers across 63 devices made the intended confidence model unusable. |

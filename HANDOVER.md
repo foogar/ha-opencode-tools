@@ -58,7 +58,7 @@ Deployment is complete and the tool answers live:
   HACS components untouched. Byte-identical to `native/ha_dev_tools/` in the repo.
 - `configuration.yaml` has `ha_dev_tools:` added and validated.
 - `ha_dev_tools` **is** present in `get_config` → `components`.
-- The tool is live as `ha_dev_tools_find_entity_references` on the
+- The tool is live as `ha_dev_tools__find_entity_references` on the
   `homeassistant_native` surface.
 
 The Core restart that was needed has already happened. Verification, in the order
@@ -80,6 +80,13 @@ it was originally planned:
 entity registry.
 
 ## find_dangling_references — built and deployed, NOT yet live
+
+Both tool names use a **double underscore**: `ha_dev_tools__find_entity_references`
+and `ha_dev_tools__find_dangling_references`. They previously used a single one,
+which Core 2026.9.3 accepts while logging "This will stop working in Home
+Assistant 2027.3" — it expects the `<domain>__` prefix. Renamed 2026-09-26. A
+contract test pins the separator, because a single underscore works today and
+reads as a typo, which is exactly how it would get "fixed" back.
 
 The second tool under the `ha_dev_tools` umbrella. **A Core restart is still
 required** — `llm.py` changed, so the LLM platform must re-register. It is not in
@@ -130,7 +137,7 @@ there and is not worth building on a well-kept install.
   token.
 - A second MCP server `homeassistant_native` appears alongside `homeassistant`.
   It carries the 16 Assist tools (9 of them `media_player`) **plus**
-  `ha_dev_tools_find_entity_references`, for 17.
+  `ha_dev_tools__find_entity_references`, for 17.
 - Standing decision, recorded and **pinned**: dev/validation tools stay on the
   `homeassistant` MCP server. **Exception:** native `<integration>/llm.py`
   providers — `ha_dev_tools` among them — are exposed on `homeassistant_native`,
