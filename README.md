@@ -23,27 +23,56 @@ continued.
 
 | Path | Purpose |
 |---|---|
-| `native/ha_dev_tools/scanner.py` | The scanner. Pure logic, stdlib only — **source of truth** |
-| `native/ha_dev_tools/llm.py` | Thin Home Assistant layer: `async_get_tools`, the tool class |
+| `native/ha_dev_tools/scanner.py` | Reference scanner. Pure logic, stdlib only — **source of truth** |
+| `native/ha_dev_tools/references.py` | Dangling-reference scanner. Pure logic, stdlib only |
+| `native/ha_dev_tools/llm.py` | Thin Home Assistant layer: `async_get_tools`, the tool classes |
 | `native/ha_dev_tools/__init__.py` | `TYPE_CHECKING` import only |
 | `native/ha_dev_tools/const.py` | `DOMAIN` constant |
 | `native/ha_dev_tools/manifest.json` | Integration manifest |
-| `native/run-tests.sh` | 35 tests, no Home Assistant needed |
-| `native/tests/` | `unittest` for the scanner, static AST checks for `llm.py` |
+| `native/run-tests.sh` | 78 tests, no Home Assistant needed |
+| `native/tests/` | `unittest` for the pure logic, static AST checks for `llm.py` |
 | `lib/entity-references.js` | The JavaScript original the Python was verified against |
 | `lib/entity-rename.js` | Plan/apply logic for a guarded entity-registry rename |
 | `scripts/find-entity-references.mjs` | CLI over the scanner |
 | `test/` | Vitest coverage for the JavaScript |
+| `RESEARCH-device-duplicate-detection.md` | Abandoned approach, with the measurements that killed it |
 
 ```sh
 npm test                                # 28 Vitest tests
-./native/run-tests.sh                   # 35 unittest tests
+./native/run-tests.sh                   # 78 unittest tests
 node scripts/find-entity-references.mjs lock.front_door
 ```
 
-The scanner never reads `secrets.yaml`, `.storage`, `deps`, `node_modules` or
+## The two tools
+
+Both are read-only and served over Home Assistant's native LLM platform.
+
+**`ha_dev_tools_find_entity_references`** — given entity IDs, reports which
+configuration files name them, with line numbers. Use before a rename or delete.
+
+**`ha_dev_tools_find_dangling_references`** — reports configuration that points
+at entity IDs which do not exist: triggers that can never fire, cards that are
+permanently unavailable, hand-typed typos. Use when something mysteriously does
+not work.
+
+They answer disjoint questions and neither substitutes for the other. A rename
+leaves working references behind; a typo leaves a reference with nothing behind
+it, and the configuration still validates, so Home Assistant loads it silently.
+
+The second tool validates existence against **`hass.states`, never the entity
+registry**. An entity declared in `configuration.yaml` under a platform with no
+`unique_id` — an MQTT sensor, for instance — is in the state machine and in no
+registry at all. Validating against the registry reports working entities as
+missing, and acting on that deletes working configuration. That is not
+hypothetical: it happened here with `sensor.proxmox_battery_level`, which is now
+a regression fixture. See `RESEARCH-device-duplicate-detection.md`.
+
+Service names share the `domain.object` shape with entity IDs, so service calls
+are excluded explicitly. `light.turn_on` is a service, not a missing entity.
+
+Neither scanner reads `secrets.yaml`, `.storage`, `deps`, `node_modules` or
 `custom_components`, matches whole entity IDs rather than fragments, and caps its
-own output. It needs no credentials and never calls Home Assistant.
+own output. They need no credentials and never call Home Assistant.
 
 That exclusion list is a **deliberate design property of a shipped tool**, not an
 oversight to fix. It is separate from the maintainer's own rule that internal
@@ -56,7 +85,9 @@ to anyone who installs it.
 | Tool | Status |
 |---|---|
 | `find_entity_references` | **Shipped and live.** Deployed as the Home Assistant native provider `ha_dev_tools_find_entity_references` and served on `/api/mcp/assist`. The CLI is the standalone equivalent and needs no install. |
+| `find_dangling_references` | **Built and deployed, pending a Core restart.** The second tool under the `ha_dev_tools` umbrella. Pure logic in `references.py`, 27 new tests plus contract checks for module isolation. Not yet live: `llm.py` changed, so the LLM platform must re-register. |
 | `rename_entity` | **No working delivery path.** The logic is finished, reviewed and tested, but every route to a tool catalog is currently blocked. |
+| *(device duplicate detection)* | **Abandoned after measurement.** See `RESEARCH-device-duplicate-detection.md`. Zero shared identifiers across 63 devices made the intended confidence model unusable. |
 
 ### Why `rename_entity` cannot ship
 

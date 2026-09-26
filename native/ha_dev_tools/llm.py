@@ -1,8 +1,9 @@
 """Home Assistant native LLM tool providers for developer tooling.
 
 Contributes read-only tools to the native LLM API so they are served to clients
-over ``/api/mcp/<API ID>``. Currently one tool: report which configuration files
-reference a given entity ID.
+over ``/api/mcp/<API ID>``. Two tools: report which configuration files reference
+a given entity ID, and report configuration references to entity IDs that do not
+exist at all.
 
 Home Assistant calls ``async_get_tools`` on the event loop, so the filesystem
 walk is pushed to an executor rather than run inline. The walk is small and
@@ -30,6 +31,7 @@ from homeassistant.helpers.llm import (
 from homeassistant.util.json import JsonObjectType
 
 from .const import DOMAIN
+from .references import find_dangling_references
 from .scanner import (
     MAX_ENTITY_IDS,
     find_entity_references,
@@ -120,6 +122,64 @@ class FindEntityReferencesTool(Tool):
         }
 
 
+class FindDanglingReferencesTool(Tool):
+    """Report configuration references to entity IDs that do not exist."""
+
+    name = f"{DOMAIN}_find_dangling_references"
+    description = (
+        "Report automations, scripts, scenes and dashboards that reference an "
+        "entity ID which does not exist. Use this when a trigger never fires, a "
+        "card is unavailable, or a rename is suspected of leaving something "
+        "behind. Existence is checked against the live state machine, not the "
+        "entity registry, because entities declared in YAML without a unique_id "
+        "are absent from the registry while working perfectly. Service calls such "
+        "as light.turn_on are excluded. Read-only: it changes nothing, and it "
+        "never reads secrets.yaml, .storage, custom_components or dependency "
+        "directories."
+    )
+    parameters = vol.Schema({})
+
+    @override
+    async def async_call(
+        self,
+        hass: HomeAssistant,
+        tool_input: ToolInput,
+        llm_context: LLMContext,
+    ) -> JsonObjectType:
+        """Call the tool."""
+        # Existence comes from hass.states, never the entity registry. An entity
+        # declared in configuration.yaml under a platform with no unique_id lives
+        # only in the state machine: validating against the registry reports real,
+        # working entities as missing, and acting on that report deletes working
+        # configuration. That is not hypothetical - it happened on this install
+        # with sensor.proxmox_battery_level, an MQTT sensor at 77%.
+        existing = frozenset(hass.states.async_entity_ids())
+
+        # Service names share the domain.object shape with entity IDs, so
+        # light.turn_on would otherwise be indistinguishable from a missing
+        # entity on form alone.
+        service_names = frozenset(
+            f"{domain}.{service}"
+            for domain, services in hass.services.async_services().items()
+            for service in services
+        )
+
+        report = await hass.async_add_executor_job(
+            find_dangling_references,
+            hass.config.path(),
+            existing,
+            service_names,
+        )
+
+        return {
+            "config_dir": hass.config.path(),
+            "validated_against": "hass.states",
+            "live_entity_count": len(existing),
+            "service_names_excluded": len(service_names),
+            **report,
+        }
+
+
 @callback
 def async_get_tools(
     hass: HomeAssistant,
@@ -137,10 +197,13 @@ def async_get_tools(
     # expose or filter, and gating it would only make it vanish in the non-assist
     # contexts where it is still perfectly safe.
     return LLMTools(
-        tools=[FindEntityReferencesTool()],
+        tools=[FindEntityReferencesTool(), FindDanglingReferencesTool()],
         prompt=(
             "Before renaming or deleting an entity, device or helper, call "
             f"{FindEntityReferencesTool.name} with its entity ID(s) to find the "
-            "configuration that would be left pointing at nothing. It is read-only."
+            "configuration that would be left pointing at nothing. When a trigger "
+            "never fires or a dashboard card is unavailable, call "
+            f"{FindDanglingReferencesTool.name} to find configuration that "
+            "already points at nothing. Both are read-only."
         ),
     )

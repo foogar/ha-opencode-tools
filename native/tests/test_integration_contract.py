@@ -12,6 +12,7 @@ These tests close that gap using `inspect` and `ast`, so they run anywhere.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import json
 import unittest
@@ -175,6 +176,129 @@ class TestLlmModule(unittest.TestCase):
         # introspect serialises to an empty member, and strict MCP clients then
         # refuse to compile the tool.
         self.assertIn("vol.All(cv.ensure_list, [str])", self.source)
+
+
+class TestModuleIsolation(unittest.TestCase):
+    """Keep the pure modules pure and the dependency between them one-way.
+
+    The umbrella hosts several tools in one integration, which means one bad
+    import in any of them can take down the tool a user already relies on. These
+    checks are cheap and they are what stops that.
+    """
+
+    def _imported_modules(self, filename: str) -> set[str]:
+        tree = ast.parse((COMPONENT_DIR / filename).read_text(encoding="utf-8"))
+        modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                modules.add(node.module)
+        return modules
+
+    def test_pure_modules_do_not_import_home_assistant(self) -> None:
+        # references.py is tested without Home Assistant installed. A runtime
+        # import of homeassistant would make every test in this suite fail to
+        # collect, which is the whole reason the split exists.
+        for module in ("scanner.py", "references.py"):
+            with self.subTest(module=module):
+                for imported in self._imported_modules(module):
+                    self.assertFalse(
+                        imported.startswith("homeassistant"),
+                        f"{module} must not import {imported}",
+                    )
+
+    def test_scanner_does_not_import_references(self) -> None:
+        # references.py reuses scanner's walk rules. That dependency is one-way:
+        # scanner is the deployed, byte-verified tool and must not gain a
+        # dependency on newer logic.
+        self.assertNotIn("references", " ".join(self._imported_modules("scanner.py")))
+
+    def test_references_reuses_the_scanner_walk_rules(self) -> None:
+        # Duplicating the exclusion list would let the two tools drift apart and
+        # report on different files, so the sharing is deliberate and asserted.
+        source = (COMPONENT_DIR / "references.py").read_text(encoding="utf-8")
+        self.assertIn("from .scanner import", source)
+
+    def test_every_module_imports_cleanly(self) -> None:
+        # The failure this catches: one module in the package raising on import
+        # stops the integration loading, and every tool in the umbrella goes with
+        # it. Imported through the package so relative imports resolve; loading
+        # by file path would raise on `from .scanner import` and prove nothing.
+        for module in sorted(COMPONENT_DIR.glob("*.py")):
+            if module.name == "llm.py":
+                continue  # needs the homeassistant package; covered by Core loading it
+            with self.subTest(module=module.name):
+                importlib.import_module(f"ha_dev_tools.{module.stem}")
+
+
+class TestDanglingToolRegistration(unittest.TestCase):
+    """Static checks on the second tool, which cannot be imported without Core."""
+
+    def setUp(self) -> None:
+        self.source = (COMPONENT_DIR / "llm.py").read_text(encoding="utf-8")
+        self.tree = ast.parse(self.source)
+        self.classes = {
+            node.name: node
+            for node in self.tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+
+    def test_both_tools_are_registered(self) -> None:
+        function = next(
+            node
+            for node in self.tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "async_get_tools"
+        )
+        registered = ast.unparse(function)
+        self.assertIn("FindEntityReferencesTool()", registered)
+        self.assertIn("FindDanglingReferencesTool()", registered)
+
+    def test_dangling_tool_implements_the_required_attributes(self) -> None:
+        tool = self.classes["FindDanglingReferencesTool"]
+        assigned = {
+            target.id
+            for node in tool.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        for attribute in ("name", "description", "parameters"):
+            self.assertIn(attribute, assigned, f"Tool is missing {attribute}")
+        methods = {
+            node.name
+            for node in tool.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        self.assertIn("async_call", methods)
+        decorated = any(
+            "override" in [ast.unparse(child) for child in node.decorator_list]
+            for node in tool.body
+            if isinstance(node, ast.AsyncFunctionDef)
+        )
+        self.assertTrue(decorated, "async_call must use @override")
+
+    def test_existence_is_taken_from_the_state_machine(self) -> None:
+        # The registry is not a complete view of the entities that exist. An
+        # entity declared in YAML with no unique_id is in hass.states and in no
+        # registry, so a registry-based check reports working entities as missing.
+        tool_source = ast.unparse(self.classes["FindDanglingReferencesTool"])
+        self.assertIn("hass.states.async_entity_ids()", tool_source)
+        self.assertNotIn("entity_registry", tool_source)
+
+    def test_service_names_are_supplied_to_disambiguate(self) -> None:
+        tool_source = ast.unparse(self.classes["FindDanglingReferencesTool"])
+        self.assertIn("hass.services.async_services()", tool_source)
+
+    def test_the_walk_is_pushed_to_an_executor(self) -> None:
+        tool_source = ast.unparse(self.classes["FindDanglingReferencesTool"])
+        self.assertIn("async_add_executor_job", tool_source)
+
+    def test_result_declares_what_it_validated_against(self) -> None:
+        # A reader who sees an ID absent from the report needs to know which
+        # source decided it existed, or they cannot tell a real gap from a
+        # limitation of the check.
+        self.assertIn('"validated_against"', self.source)
 
 
 if __name__ == "__main__":
