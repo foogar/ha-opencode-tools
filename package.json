@@ -1,0 +1,17 @@
+{
+  "name": "ha-opencode-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Read-only Home Assistant tools for AI coding agents, shipped as a native llm.py integration.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
