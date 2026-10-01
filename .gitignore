@@ -2,3 +2,9 @@ node_modules/
 *.log
 __pycache__/
 *.pyc
+
+# Local session context and install-specific research. Never commit: these
+# describe one installation's devices, areas and entity IDs. Kept locally
+# because the reasoning in RESEARCH-* is worth keeping, not publishing.
+HANDOVER.md
+RESEARCH-*.md

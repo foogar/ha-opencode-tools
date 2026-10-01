@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Authored Home Assistant tools for OpenCode. No upstream relationship, so no rebase tax.",
+  "license": "MIT",
+  "description": "Read-only Home Assistant tools for AI coding agents, shipped as a native llm.py integration.",
   "scripts": {
     "test": "vitest run"
   },

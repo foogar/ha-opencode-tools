@@ -85,13 +85,13 @@ class TestReportsMissingEntities(ScanCase):
 
 class TestRegistryVersusStates(ScanCase):
     def test_yaml_entity_absent_from_registry_is_not_dangling(self) -> None:
-        # sensor.proxmox_battery_level is declared under `mqtt: sensor:` with no
+        # sensor.registry_absent_sensor is declared under `mqtt: sensor:` with no
         # unique_id. It is in hass.states at 77% and in no registry at all.
         # `existing` here stands in for hass.states, which is what must be passed.
-        self.write("configuration.yaml", '    - name: "Proxmox Battery Level"\n')
-        self.write("automations.yaml", "- entity_id: sensor.proxmox_battery_level\n")
-        self.write("dashboards/workshop.yaml", "entity: sensor.proxmox_battery_level\n")
-        report = self.scan(frozenset({"sensor.proxmox_battery_level"}))
+        self.write("configuration.yaml", '    - name: "Registry Absent Sensor"\n')
+        self.write("automations.yaml", "- entity_id: sensor.registry_absent_sensor\n")
+        self.write("dashboards/workshop.yaml", "entity: sensor.registry_absent_sensor\n")
+        report = self.scan(frozenset({"sensor.registry_absent_sensor"}))
         self.assertEqual(
             report["dangling_count"],
             0,
@@ -99,11 +99,11 @@ class TestRegistryVersusStates(ScanCase):
         )
 
     def test_still_reports_a_genuinely_missing_sibling(self) -> None:
-        # The real johnsphone typo alongside the working proxmox sensor.
-        self.write("automations.yaml", "- entity_id: sensor.proxmox_battery_level\n")
-        self.write("scripts.yaml", "- entity_id: sensor.johnsphone_battery_state\n")
-        report = self.scan(frozenset({"sensor.proxmox_battery_level"}))
-        self.assertEqual(self.dangling_ids(report), ["sensor.johnsphone_battery_state"])
+        # A second, genuinely absent entity alongside the working one.
+        self.write("automations.yaml", "- entity_id: sensor.registry_absent_sensor\n")
+        self.write("scripts.yaml", "- entity_id: sensor.phone_battery_state\n")
+        report = self.scan(frozenset({"sensor.registry_absent_sensor"}))
+        self.assertEqual(self.dangling_ids(report), ["sensor.phone_battery_state"])
 
 
 class TestServiceNamesAreNotEntities(ScanCase):
@@ -111,10 +111,10 @@ class TestServiceNamesAreNotEntities(ScanCase):
         self.write(
             "automations.yaml",
             "- action: light.turn_on\n- action: switch.toggle\n"
-            "- action: notify.mobile_app_johns_phone\n",
+            "- action: notify.mobile_app_some_phone\n",
         )
         services = frozenset(
-            {"light.turn_on", "switch.toggle", "notify.mobile_app_johns_phone"}
+            {"light.turn_on", "switch.toggle", "notify.mobile_app_some_phone"}
         )
         self.assertEqual(self.scan(frozenset(), services)["dangling_count"], 0)
 
@@ -193,7 +193,7 @@ class TestNonEntityTokens(ScanCase):
         self.assertEqual(self.scan(frozenset())["dangling_count"], 0)
 
     def test_device_ids_do_not_produce_candidates(self) -> None:
-        self.write("automations.yaml", "device_id: 881cabe3a489593a15c8c36d2cc936e3\n")
+        self.write("automations.yaml", "device_id: 0123456789abcdef0123456789abcdef\n")
         self.assertEqual(self.scan(frozenset())["dangling_count"], 0)
 
 
@@ -222,7 +222,7 @@ class TestExclusions(ScanCase):
         self.assertEqual(self.scan(frozenset())["dangling_count"], 0)
 
     def test_nested_configuration_is_scanned(self) -> None:
-        self.write("packages/lights/porch.yaml", "- entity_id: sensor.nested_gone\n")
+        self.write("packages/lights/nested.yaml", "- entity_id: sensor.nested_gone\n")
         self.assertEqual(self.scan(frozenset())["dangling_count"], 1)
 
 

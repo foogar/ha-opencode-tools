@@ -158,7 +158,7 @@ class FindDanglingReferencesTool(Tool):
         # only in the state machine: validating against the registry reports real,
         # working entities as missing, and acting on that report deletes working
         # configuration. That is not hypothetical - it happened on this install
-        # with sensor.proxmox_battery_level, an MQTT sensor at 77%.
+        # with sensor.registry_absent_sensor, an MQTT sensor at 77%.
         existing = frozenset(hass.states.async_entity_ids())
 
         # Service names share the domain.object shape with entity IDs, so

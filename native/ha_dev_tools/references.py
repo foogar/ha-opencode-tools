@@ -16,7 +16,7 @@ acting on that report deletes working configuration. ``references`` performs no
 lookup of its own: the caller supplies the set of IDs that actually exist.
 
 Service names share the ``domain.object`` shape with entity IDs, so
-``light.turn_on`` and ``notify.mobile_app_johns_phone`` are indistinguishable
+``light.turn_on`` and ``notify.mobile_app_some_phone`` are indistinguishable
 from entities by form alone. ``service_names`` disambiguates them; without it
 every service call in the configuration reads as a broken reference.
 
